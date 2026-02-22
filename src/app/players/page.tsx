@@ -245,6 +245,15 @@ export default function PlayersPage() {
                             แก้ไข
                           </button>
 
+
+                          <button
+                          onClick={() => router.push(`/players/view/${p.id}`)}
+                          className="inline-flex items-center justify-center rounded-full bg-blue-500 px-4 py-2 text-xs font-extrabold text-black shadow-[0_0_14px_rgba(59,130,246,0.45)] hover:bg-blue-400 transition"
+                          >
+                           ดู
+                          </button>
+
+
                           <button
                             onClick={() => onDelete(p.id)}
                             className="inline-flex items-center justify-center rounded-full bg-red-500 px-4 py-2 text-xs font-extrabold text-black shadow-[0_0_14px_rgba(239,68,68,0.45)] hover:bg-red-400 transition"
