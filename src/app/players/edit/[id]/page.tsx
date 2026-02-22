@@ -3,8 +3,22 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
+/* =========================================================
+   ✅ CLIENT PAGE: Edit Player (หน้าแก้ไขนักฟุตบอล)
+   FLOW หลัก:
+   1) อ่าน id จาก URL (/players/[id]/edit)
+   2) โหลดข้อมูลเดิมด้วย GET /api/players/:id
+   3) เติมค่าเข้า form (string ทั้งหมดเพื่อให้ input ใช้งานง่าย)
+   4) กด Update -> แปลงชนิดข้อมูล -> PUT /api/players/:id
+   5) สำเร็จแล้วกลับ /players
+   ========================================================= */
+
+/* =======================
+   🔶 TYPES
+   ======================= */
 type Position = "GK" | "DF" | "MF" | "FW";
 
+/* ข้อมูล Player ที่ได้จาก API/DB */
 type Player = {
   id: number;
   first_name: string;
@@ -23,6 +37,7 @@ type Player = {
   red_cards: number;
 };
 
+/* State ของฟอร์ม: เก็บเป็น string เพราะ input/select ส่งกลับเป็น string */
 type PlayerFormState = {
   first_name: string;
   last_name: string;
@@ -40,11 +55,17 @@ type PlayerFormState = {
   red_cards: string;
 };
 
+/* =======================
+   🔶 HELPERS (แปลงข้อมูล)
+   ======================= */
+
+/* แปลง number/null -> string สำหรับโชว์ใน input */
 function toStr(n: number | null | undefined): string {
   if (n === null || n === undefined) return "";
   return String(n);
 }
 
+/* แปลง string -> number หรือ null (ถ้าเว้นว่าง) */
 function toNumOrNull(s: string): number | null {
   const t = s.trim();
   if (t === "") return null;
@@ -52,10 +73,12 @@ function toNumOrNull(s: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/* แปลง string -> number โดย default = 0 (สำหรับ stats) */
 function toNumOrZero(s: string): number {
   return toNumOrNull(s) ?? 0;
 }
 
+/* ทำวันที่ให้เป็น YYYY-MM-DD (ตัดเวลาออก ถ้ามี T) */
 function toDateOnly(value: string): string | null {
   const v = value?.trim();
   if (!v) return null;
@@ -63,11 +86,17 @@ function toDateOnly(value: string): string | null {
   return v;
 }
 
+/* =========================================================
+   ✅ PAGE COMPONENT
+   ========================================================= */
 export default function EditPlayerPage() {
   const router = useRouter();
+
+  /* ✅ อ่าน id จาก route param */
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
 
+  /* ✅ ค่าเริ่มต้นฟอร์ม */
   const emptyForm: PlayerFormState = useMemo(
     () => ({
       first_name: "",
@@ -89,14 +118,17 @@ export default function EditPlayerPage() {
   );
 
   const [form, setForm] = useState<PlayerFormState>(emptyForm);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true); // ✅ สถานะโหลดข้อมูลเดิม
+  const [saving, setSaving] = useState(false);  // ✅ สถานะกำลังอัปเดต
 
-  // โหลดข้อมูลเดิม: GET /api/players/:id
+  /* =========================================================
+     ✅ LOAD: GET /api/players/:id (โหลดข้อมูลเดิมมาเติมฟอร์ม)
+     ========================================================= */
   useEffect(() => {
-    let alive = true;
+    let alive = true; // ✅ กัน state update หลัง unmount
 
     async function load() {
+      /* validate id ขั้นต้น */
       if (!Number.isInteger(id) || id <= 0) {
         setLoading(false);
         alert("Invalid id");
@@ -107,10 +139,11 @@ export default function EditPlayerPage() {
       try {
         const res = await fetch(`/api/players/${id}`, { cache: "no-store" });
         if (!res.ok) throw new Error(await res.text());
-        const p = (await res.json()) as Player;
 
+        const p = (await res.json()) as Player;
         if (!alive) return;
 
+        /* ✅ map ข้อมูล API -> form (string ทั้งหมด) */
         setForm({
           first_name: p.first_name ?? "",
           last_name: p.last_name ?? "",
@@ -140,6 +173,7 @@ export default function EditPlayerPage() {
     };
   }, [id, emptyForm]);
 
+  /* ✅ handler เปลี่ยนค่า input/select */
   function onChange(
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) {
@@ -147,11 +181,15 @@ export default function EditPlayerPage() {
     setForm((prev) => ({ ...prev, [name]: value }));
   }
 
+  /* =========================================================
+     ✅ SUBMIT: PUT /api/players/:id (อัปเดตข้อมูล)
+     ========================================================= */
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setSaving(true);
 
     try {
+      /* ✅ payload ส่งไป API: แปลงชนิดข้อมูลให้ DB ใช้ได้ */
       const payload = {
         first_name: form.first_name,
         last_name: form.last_name,
@@ -180,6 +218,7 @@ export default function EditPlayerPage() {
         throw new Error(text || "Update failed");
       }
 
+      /* ✅ สำเร็จ: กลับหน้าตาราง */
       router.push("/players");
       router.refresh();
     } catch (err) {
@@ -189,6 +228,9 @@ export default function EditPlayerPage() {
     }
   }
 
+  /* =========================================================
+     ✅ UI
+     ========================================================= */
   return (
     <div className="min-h-screen bg-black text-white">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-10">
@@ -197,6 +239,7 @@ export default function EditPlayerPage() {
             <h1 className="text-xl sm:text-2xl font-extrabold">
               ✏️ แก้ไขนักฟุตบอล #{Number.isFinite(id) ? id : "-"}
             </h1>
+
             <button
               onClick={() => router.back()}
               className="rounded-full bg-white/5 px-4 py-2 text-sm font-bold text-white ring-1 ring-white/15 hover:bg-white/10 transition"
@@ -205,9 +248,11 @@ export default function EditPlayerPage() {
             </button>
           </div>
 
+          {/* ✅ Loading state */}
           {loading ? (
             <div className="mt-6 text-sm text-zinc-300">Loading...</div>
           ) : (
+            /* ✅ Form state */
             <form onSubmit={onSubmit} className="mt-6 space-y-6">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Field
@@ -344,6 +389,9 @@ export default function EditPlayerPage() {
   );
 }
 
+/* =========================================================
+   ✅ REUSABLE FIELD COMPONENT
+   ========================================================= */
 function Field(props: {
   label: string;
   name: keyof PlayerFormState;
@@ -366,12 +414,16 @@ function Field(props: {
   );
 }
 
+/* =========================================================
+   ✅ POSITION SELECT COMPONENT
+   ========================================================= */
 function SelectPosition(props: {
   value: PlayerFormState["position"];
   onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
 }) {
   const { value, onChange } = props;
   const options: Array<PlayerFormState["position"]> = ["", "GK", "DF", "MF", "FW"];
+
   return (
     <div>
       <label className="text-sm font-semibold text-zinc-200">Position</label>

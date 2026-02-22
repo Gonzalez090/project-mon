@@ -3,8 +3,19 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
+/* =========================================================
+   ✅ CLIENT PAGE: Players List (หน้ารวมรายชื่อนักฟุตบอล)
+   จุดเด่นที่พรีเซนต์:
+   1) โหลดข้อมูลทั้งหมดจาก API (GET /api/players)
+   2) แสดงในตาราง (Table UI) + สถานะ Loading/Empty
+   3) กดเพิ่ม -> ไปหน้า Create (/players/create)
+   4) กดแก้ไข -> ไปหน้า Edit (/players/edit/:id)
+   5) กดลบ -> DELETE /api/players/:id แล้วรีเฟชรายการ
+   ========================================================= */
+
 type Position = "GK" | "DF" | "MF" | "FW";
 
+/* โครงสร้างข้อมูลที่ได้จาก API */
 type Player = {
   id: number;
   first_name: string;
@@ -23,23 +34,33 @@ type Player = {
   red_cards: number;
 };
 
+/* ✅ แสดงวันเกิดให้เป็น YYYY-MM-DD (รองรับ ISO ที่มีเวลา) */
 function formatDateOnly(v: string | null): string {
   if (!v) return "-";
-  // รองรับทั้ง "YYYY-MM-DD" และ ISO
   return v.includes("T") ? v.split("T")[0] : v;
 }
 
 export default function PlayersPage() {
   const router = useRouter();
 
+  /* =======================
+     ✅ STATE หลัก
+     ======================= */
   const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
+  /* =========================================================
+     ✅ FETCH LIST: GET /api/players
+     - useCallback เพื่อให้ useEffect เรียกได้เสถียร (ไม่ loop)
+     - cache: "no-store" เพื่อดึงข้อมูลล่าสุดทุกครั้ง
+     ========================================================= */
   const fetchPlayers = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch("/api/players", { cache: "no-store" });
       const data: unknown = await res.json();
+
+      /* กันไว้: ถ้าไม่ใช่ array ให้เป็น [] */
       setPlayers(Array.isArray(data) ? (data as Player[]) : []);
     } finally {
       setLoading(false);
@@ -50,6 +71,11 @@ export default function PlayersPage() {
     fetchPlayers();
   }, [fetchPlayers]);
 
+  /* =========================================================
+     ✅ DELETE: DELETE /api/players/:id
+     - confirm ก่อนลบ
+     - ลบสำเร็จแล้วเรียก fetchPlayers() เพื่อรีโหลดตาราง
+     ========================================================= */
   async function onDelete(id: number) {
     if (!confirm("ยืนยันการลบข้อมูลนักฟุตบอลคนนี้?")) return;
 
@@ -63,10 +89,10 @@ export default function PlayersPage() {
     await fetchPlayers();
   }
 
+  // UI //
   return (
     <div className="min-h-screen bg-black text-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-10">
-        {/* HERO */}
         <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
           <div className="absolute inset-0 opacity-30 bg-[radial-gradient(circle_at_30%_20%,rgba(34,197,94,0.35),transparent_55%),radial-gradient(circle_at_80%_10%,rgba(59,130,246,0.25),transparent_45%),radial-gradient(circle_at_70%_80%,rgba(16,185,129,0.20),transparent_55%)]" />
           <div className="relative px-6 py-6 sm:px-10 sm:py-8">
@@ -84,6 +110,7 @@ export default function PlayersPage() {
                 </p>
               </div>
 
+              {/* ✅ ไปหน้าเพิ่มนักฟุตบอล */}
               <button
                 onClick={() => router.push("/players/create")}
                 className="inline-flex items-center justify-center rounded-full bg-green-500 px-5 py-2.5 text-sm font-extrabold text-black shadow-[0_0_18px_rgba(34,197,94,0.55)] hover:bg-green-400 transition"
@@ -95,12 +122,13 @@ export default function PlayersPage() {
           <div className="h-2 bg-gradient-to-r from-green-400 via-green-500 to-emerald-400" />
         </div>
 
-        {/* TABLE CARD */}
         <div className="mt-8 rounded-2xl border border-white/10 bg-zinc-950/90 shadow-2xl overflow-hidden">
           <div className="px-6 py-5 sm:px-8 sm:py-6 border-b border-white/10 flex items-center justify-between">
             <h2 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
               🏟️ รายชื่อนักฟุตบอล
             </h2>
+
+            {/* ✅ แสดงสถานะจำนวนรายการ / loading */}
             <span className="text-xs text-zinc-300">
               {loading ? "Loading..." : `ทั้งหมด ${players.length} คน`}
             </span>
@@ -116,20 +144,16 @@ export default function PlayersPage() {
                     <th className="px-4 py-3 text-left">นามสกุล</th>
                     <th className="px-4 py-3 text-center">เบอร์</th>
                     <th className="px-4 py-3 text-center">ตำแหน่ง</th>
-
                     <th className="px-4 py-3 text-left">สัญชาติ</th>
                     <th className="px-4 py-3 text-center">วันเกิด</th>
                     <th className="px-4 py-3 text-center">ส่วนสูง</th>
                     <th className="px-4 py-3 text-center">น้ำหนัก</th>
-
                     <th className="px-4 py-3 text-left">ทีม</th>
                     <th className="px-4 py-3 text-left">ลีก</th>
-
                     <th className="px-4 py-3 text-center">G</th>
                     <th className="px-4 py-3 text-center">A</th>
                     <th className="px-4 py-3 text-center">YC</th>
                     <th className="px-4 py-3 text-center">RC</th>
-
                     <th className="px-4 py-3 text-center">จัดการ</th>
                   </tr>
                 </thead>
@@ -137,15 +161,13 @@ export default function PlayersPage() {
                 <tbody>
                   {!loading && players.length === 0 && (
                     <tr>
-                      <td
-                        colSpan={16}
-                        className="py-10 text-center text-zinc-300"
-                      >
+                      <td colSpan={16} className="py-10 text-center text-zinc-300">
                         ยังไม่มีข้อมูลนักฟุตบอล
                       </td>
                     </tr>
                   )}
 
+                  
                   {players.map((p) => (
                     <tr
                       key={p.id}
@@ -213,6 +235,7 @@ export default function PlayersPage() {
                         {p.red_cards ?? 0}
                       </td>
 
+                      {/* ✅ ปุ่มจัดการ: Edit + Delete */}
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="flex items-center justify-center gap-2">
                           <button

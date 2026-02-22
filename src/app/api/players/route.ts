@@ -2,8 +2,20 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import type { RowDataPacket, OkPacket, ResultSetHeader } from "mysql2";
 
+/* =========================================================
+   ✅ API ROUTE: /api/players
+   - GET  : ดึงรายชื่อผู้เล่นทั้งหมด
+   - POST : เพิ่มผู้เล่นใหม่
+   - ใช้ MySQL ผ่าน lib/db (query)
+   ========================================================= */
+
+/* =======================
+   🔶 TYPES (โครงสร้างข้อมูล)
+   ======================= */
+
 type Position = "GK" | "DF" | "MF" | "FW";
 
+/* โครงสร้างข้อมูลผู้เล่น (สอดคล้องกับตาราง players) */
 type PlayerData = {
   id: number;
   first_name: string;
@@ -24,20 +36,32 @@ type PlayerData = {
   updated_at?: string;
 };
 
+/* Row ที่ได้จาก mysql2 (RowDataPacket) + ฟิลด์ของเรา */
 type PlayerRow = RowDataPacket & PlayerData;
 
+/* ค่าที่ใช้ bind เข้า SQL placeholder (?) */
 type DbValue = string | number | null;
 
-/** wrapper แก้ values never[] โดยไม่ต้องแก้ lib/db */
+/* =========================================================
+   ✅ WRAPPER: แก้ปัญหา values เป็น never[]
+   - ไม่ต้องไปแก้ lib/db
+   - ทำให้ TypeScript รู้ว่า values เป็น DbValue[]
+   ========================================================= */
 const dbQuery = query as unknown as (args: {
   query: string;
   values?: DbValue[];
 }) => Promise<unknown>;
 
+/* =======================
+   🔶 TYPE GUARDS (เช็คชนิดผลลัพธ์)
+   ======================= */
+
+/* เช็คว่า result เป็น array ของ rows (กรณี SELECT) */
 function isRowArray(v: unknown): v is RowDataPacket[] {
   return Array.isArray(v);
 }
 
+/* เช็คว่า result มี insertId (กรณี INSERT) */
 function hasInsertId(v: unknown): v is OkPacket | ResultSetHeader {
   return (
     typeof v === "object" &&
@@ -47,7 +71,11 @@ function hasInsertId(v: unknown): v is OkPacket | ResultSetHeader {
   );
 }
 
-// GET : แสดงข้อมูลทั้งหมด
+/* =========================================================
+   ✅ GET /api/players
+   - ดึงข้อมูลผู้เล่นทั้งหมด
+   - เรียงตาม id จากน้อยไปมาก
+   ========================================================= */
 export async function GET() {
   try {
     const result = await dbQuery({
@@ -55,8 +83,8 @@ export async function GET() {
       values: [],
     });
 
+    /* กันไว้ เผื่อ DB คืนค่าไม่ใช่ array */
     if (!isRowArray(result)) {
-      // กันไว้ เผื่อ db คืนแบบไม่ใช่แถว
       return NextResponse.json([], { status: 200 });
     }
 
@@ -70,12 +98,18 @@ export async function GET() {
   }
 }
 
-// POST : เพิ่มข้อมูลใหม่
+/* =========================================================
+   ✅ POST /api/players
+   - เพิ่มข้อมูลผู้เล่นใหม่
+   - validate ขั้นต่ำ: ต้องมี first_name และ last_name
+   - ใส่ created_at, updated_at = NOW()
+   - คืน id ที่สร้างใหม่กลับไป (insertId)
+   ========================================================= */
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as Partial<PlayerData>;
 
-    // validation ขั้นต่ำ (ปรับได้)
+    /* validation ขั้นต่ำ */
     if (!body.first_name || !body.last_name) {
       return NextResponse.json(
         { message: "error", error: "first_name and last_name are required" },
@@ -83,6 +117,7 @@ export async function POST(request: Request) {
       );
     }
 
+    /* เตรียม values ให้ตรงกับลำดับ ? ใน SQL */
     const values: DbValue[] = [
       body.first_name ?? null,
       body.last_name ?? null,
@@ -126,6 +161,7 @@ export async function POST(request: Request) {
       values,
     });
 
+    /* ถ้า insert ไม่ได้ insertId => ถือว่าล้มเหลว */
     if (!hasInsertId(result)) {
       return NextResponse.json(
         { message: "error", error: "Insert failed" },
@@ -133,6 +169,7 @@ export async function POST(request: Request) {
       );
     }
 
+    /* คืนผลลัพธ์แบบสั้นๆ + id ใหม่ */
     return NextResponse.json(
       {
         message: "success",

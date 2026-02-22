@@ -1,9 +1,18 @@
 import { query } from "@/lib/db";
 import type { RowDataPacket, OkPacket, ResultSetHeader } from "mysql2";
 
+/* =========================================================
+   API ROUTE: /api/players/[id]
+   ทำหน้าที่จัดการข้อมูลนักฟุตบอลรายบุคคล (GET / PUT / DELETE)
+   เชื่อมต่อฐานข้อมูล MySQL ผ่านฟังก์ชัน query()
+   ========================================================= */
+
+/* ---------- TYPE DEFINITIONS ---------- */
+
 type DbDate = string | Date | null;
 type DbValue = string | number | null;
 
+/* โครงสร้างข้อมูล Player ตามตารางในฐานข้อมูล */
 type PlayerData = {
   id: number;
   first_name: string;
@@ -24,16 +33,21 @@ type PlayerData = {
   updated_at: DbDate;
 };
 
+/* row จาก mysql2 จะเป็น RowDataPacket รวมกับ field ของเรา */
 type PlayerRow = RowDataPacket & PlayerData;
 
-/** ✅ Next.js บางโหมด params เป็น Promise */
+/* Next.js App Router: params อาจเป็น Promise */
 type RouteContext = { params: Promise<{ id: string }> };
 
+/* แปลง query ให้รองรับ { query, values } */
 const dbQuery = query as unknown as (args: {
   query: string;
   values?: DbValue[];
 }) => Promise<unknown>;
 
+/* ---------- HELPER FUNCTIONS ---------- */
+
+/* ส่ง JSON Response กลับ Client */
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -41,32 +55,35 @@ function json(data: unknown, status = 200) {
   });
 }
 
+/* ตรวจสอบ id ต้องเป็นเลขจำนวนเต็มบวก */
 function parseId(rawId: string) {
-  const raw = String(rawId ?? "").trim();
-  const id = Number(raw);
-  if (!raw || !Number.isInteger(id) || id <= 0) return null;
+  const id = Number(String(rawId).trim());
+  if (!Number.isInteger(id) || id <= 0) return null;
   return id;
 }
 
+/* เช็คว่า result จาก SELECT เป็น array */
 function isRowArray(v: unknown): v is RowDataPacket[] {
   return Array.isArray(v);
 }
 
+/* เช็คว่า result จาก UPDATE/DELETE มี affectedRows */
 function hasAffectedRows(v: unknown): v is OkPacket | ResultSetHeader {
   return (
     typeof v === "object" &&
     v !== null &&
-    "affectedRows" in v &&
-    typeof (v as { affectedRows: unknown }).affectedRows === "number"
+    "affectedRows" in v
   );
 }
 
-// GET /api/players/[id]
+/* =========================================================
+   🔹 GET PLAYER BY ID
+   ========================================================= */
 export async function GET(_request: Request, { params }: RouteContext) {
   try {
     const { id: rawId } = await params;
     const id = parseId(rawId);
-    if (!id) return json({ message: "error", error: "Invalid id" }, 400);
+    if (!id) return json({ message: "Invalid id" }, 400);
 
     const result = await dbQuery({
       query: "SELECT * FROM players WHERE id = ? LIMIT 1",
@@ -74,29 +91,29 @@ export async function GET(_request: Request, { params }: RouteContext) {
     });
 
     if (!isRowArray(result) || result.length === 0) {
-      return json({ message: "not_found" }, 404);
+      return json({ message: "Player not found" }, 404);
     }
 
     return json(result[0] as PlayerRow, 200);
   } catch (err) {
-    return json({ message: "error", error: String(err) }, 500);
+    return json({ message: "Server error", error: String(err) }, 500);
   }
 }
 
-// PUT /api/players/[id]
+/* =========================================================
+   🔹 UPDATE PLAYER BY ID
+   ========================================================= */
 export async function PUT(request: Request, { params }: RouteContext) {
   try {
     const { id: rawId } = await params;
     const id = parseId(rawId);
-    if (!id) return json({ message: "error", error: "Invalid id" }, 400);
+    if (!id) return json({ message: "Invalid id" }, 400);
 
-    const body = (await request.json()) as Partial<
-      Omit<PlayerData, "id" | "created_at" | "updated_at">
-    >;
+    const body = await request.json();
 
     if (!body.first_name || !body.last_name) {
       return json(
-        { message: "error", error: "first_name and last_name are required" },
+        { message: "first_name and last_name are required" },
         400
       );
     }
@@ -107,7 +124,7 @@ export async function PUT(request: Request, { params }: RouteContext) {
       body.jersey_number ?? null,
       body.position ?? null,
       body.nationality ?? null,
-      (body.date_of_birth as unknown as string | null) ?? null,
+      body.date_of_birth ?? null,
       body.height_cm ?? null,
       body.weight_kg ?? null,
       body.team_name ?? null,
@@ -121,8 +138,7 @@ export async function PUT(request: Request, { params }: RouteContext) {
 
     const result = await dbQuery({
       query: `
-        UPDATE players
-        SET
+        UPDATE players SET
           first_name = ?,
           last_name = ?,
           jersey_number = ?,
@@ -144,21 +160,23 @@ export async function PUT(request: Request, { params }: RouteContext) {
     });
 
     if (!hasAffectedRows(result) || result.affectedRows === 0) {
-      return json({ message: "not_found" }, 404);
+      return json({ message: "Player not found" }, 404);
     }
 
-    return json({ message: "success" }, 200);
+    return json({ message: "Update success" }, 200);
   } catch (err) {
-    return json({ message: "error", error: String(err) }, 500);
+    return json({ message: "Server error", error: String(err) }, 500);
   }
 }
 
-// DELETE /api/players/[id]
+/* =========================================================
+   🔹 DELETE PLAYER BY ID
+   ========================================================= */
 export async function DELETE(_request: Request, { params }: RouteContext) {
   try {
     const { id: rawId } = await params;
     const id = parseId(rawId);
-    if (!id) return json({ message: "error", error: "Invalid id" }, 400);
+    if (!id) return json({ message: "Invalid id" }, 400);
 
     const result = await dbQuery({
       query: "DELETE FROM players WHERE id = ?",
@@ -166,11 +184,11 @@ export async function DELETE(_request: Request, { params }: RouteContext) {
     });
 
     if (!hasAffectedRows(result) || result.affectedRows === 0) {
-      return json({ message: "not_found" }, 404);
+      return json({ message: "Player not found" }, 404);
     }
 
-    return json({ message: "success" }, 200);
+    return json({ message: "Delete success" }, 200);
   } catch (err) {
-    return json({ message: "error", error: String(err) }, 500);
+    return json({ message: "Server error", error: String(err) }, 500);
   }
 }
